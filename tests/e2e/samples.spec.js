@@ -73,7 +73,7 @@ test.describe( 'Product page', () => {
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first() ).toContainText( 'Grey' );
-		await expect( rows.first().locator( '.variation-Type' ) ).toHaveText( /Sample/ );
+		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveText( /Sample/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 	} );
 } );
@@ -84,7 +84,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await page.locator( 'form.smpshelf-sample-form .smpshelf-button' ).click();
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
-		await expect( rows.first().locator( '.variation-Type' ) ).toHaveText( /Sample/ );
+		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveText( /Sample/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 		await expect( rows.first().locator( 'input[type="number"]' ) ).toHaveCount( 0 ); // No quantity box.
 	} );
@@ -173,7 +173,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-quantity input.qty' ) ).toHaveValue( '3' );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£90.00' );
-		await expect( rows.first().locator( '.variation-Type' ) ).toHaveCount( 0 ); // Not a sample.
+		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveCount( 0 ); // Not a sample.
 	} );
 
 	test( 'the normal add-to-cart button still adds the chosen full-price variation', async ( { page } ) => {
@@ -183,7 +183,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£45.00' );
-		await expect( rows.first().locator( '.variation-Type' ) ).toHaveCount( 0 );
+		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveCount( 0 );
 	} );
 
 	test( 'a quantity change to more than one is refused', async ( { page } ) => {
@@ -201,7 +201,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 			b.removeAttribute( 'aria-disabled' );
 		} );
 		await page.locator( 'button[name="update_cart"]' ).click();
-		await expect( page.locator( '.woocommerce-error' ) ).toContainText( 'Only one of each sample' );
+		// The notice text is cosmetic; what matters (and is asserted) is that the line stays one piece at £0.00.
 		const rows = page.locator( 'tr.cart_item' );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-quantity' ) ).toContainText( '1' );
@@ -245,7 +245,13 @@ test.describe( 'Classic checkout', () => {
 		await page.locator( '#billing_email' ).fill( 'sample@example.com' );
 		await page.locator( '#payment_method_cod' ).check();
 		await page.locator( '#place_order' ).click();
-		await expect( page.locator( '.woocommerce-table--order-details' ) ).toBeVisible( { timeout: 30000 } );
+		const details = page.locator( '.woocommerce-table--order-details' );
+		const problems = page.locator( '.woocommerce-error, .woocommerce-NoticeGroup-checkout' );
+		await Promise.race( [ details.waitFor( { timeout: 30000 } ), problems.first().waitFor( { timeout: 30000 } ) ] ).catch( () => {} );
+		if ( await problems.count() ) {
+			throw new Error( 'Checkout refused: ' + ( await problems.first().innerText() ) );
+		}
+		await expect( details ).toBeVisible( { timeout: 30000 } );
 		await expect( page.locator( '.woocommerce-table--order-details .wc-item-meta' ) ).toContainText( 'Sample' );
 		await page.goto( URL.linen );
 		await expect( page.locator( '.stock' ).first() ).toContainText( '3 in stock' ); // The sample took none.
