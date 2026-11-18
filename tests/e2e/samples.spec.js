@@ -286,7 +286,7 @@ test.describe( 'Block cart and checkout (Store API)', () => {
 	test( 'a block-checkout order records the sample and takes no stock', async ( { page } ) => {
 		await postSample( page, URL.linen );
 		await page.goto( '/checkout/' );
-		await page.locator( '.wc-block-checkout' ).waitFor();
+		await page.locator( '.wc-block-checkout' ).first().waitFor();
 		const redirect = await page.evaluate( async () => {
 			const billing = { first_name: 'Sam', last_name: 'Ple', address_1: '1 Test Street', address_2: '', city: 'London', state: '', postcode: 'SW1A 1AA', country: 'GB', email: 'sample@example.com', phone: '07700900123' };
 			const shipping = { ...billing };
