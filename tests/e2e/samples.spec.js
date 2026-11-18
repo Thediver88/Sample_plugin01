@@ -196,6 +196,28 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await expect( page.locator( 'tr.cart-discount' ) ).toContainText( '£15.00' ); // 50% of £30 only (not of £32.50).
 	} );
 
+	test( 'a sample of a heavy-class product ships at the plain rate; the full product pays the class cost', async ( { page } ) => {
+		await postSample( page, URL.slate );
+		await page.goto( '/classic-cart/' );
+		await expect( page.locator( '.woocommerce-shipping-totals' ) ).toContainText( '£5.00' );
+		await expect( page.locator( '.woocommerce-shipping-totals' ) ).not.toContainText( '£55.00' );
+
+		const id = await productId( page, URL.slate );
+		await page.request.post( URL.slate, { form: { 'add-to-cart': id, quantity: '1' } } ); // The same product, full price.
+		await page.goto( '/classic-cart/' );
+		await expect( page.locator( '.woocommerce-shipping-totals' ) ).toContainText( '£55.00' );
+	} );
+
+	test( 'a sample of a variation of a heavy-class product ships at the plain rate (no fallback to the parent)', async ( { page } ) => {
+		const variations = await oakVariations( page );
+		const parent = await oakParentId( page );
+		const grey = variations.Grey;
+		await page.request.post( URL.oak, { form: { 'add-to-cart': parent, variation_id: grey.id, ...grey.attributes, quantity: '1', smpshelf_sample: '1' } } );
+		await page.goto( '/classic-cart/' );
+		await expect( page.locator( '.woocommerce-shipping-totals' ) ).toContainText( '£5.00' );
+		await expect( page.locator( '.woocommerce-shipping-totals' ) ).not.toContainText( '£55.00' );
+	} );
+
 	test( 'a quantity change to more than one is refused', async ( { page } ) => {
 		await postSample( page, URL.tile );
 		await page.goto( '/classic-cart/' );

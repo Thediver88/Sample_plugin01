@@ -79,7 +79,7 @@ class Smpshelf_Settings_Page extends WC_Settings_Page {
 			),
 			array(
 				'title'   => __( 'Stock', 'sample-shelf-for-woocommerce' ),
-				'desc'    => __( 'Samples reduce the product\'s stock when the order is placed. (While a sample is in the cart, and for products that are out of stock, WooCommerce still treats it like any other item: samples cannot be requested for out-of-stock products.)', 'sample-shelf-for-woocommerce' ),
+				'desc'    => __( 'Samples reduce the product\'s stock when the order is placed. Samples cannot be requested for out-of-stock products, and while a sample is in the cart WooCommerce still counts it: a shopper who wants every remaining unit plus a sample is told there is not enough stock.', 'sample-shelf-for-woocommerce' ),
 				'id'      => Smpshelf_Settings::OPT_STOCK,
 				'type'    => 'checkbox',
 				'default' => 'no',

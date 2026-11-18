@@ -50,8 +50,16 @@ function smpshelf_seed_simple( $sku, $name, $slug, $price, array $meta = array()
 	return $product->save();
 }
 
+// A heavy shipping class costing £50 extra on the flat rate, used by the slate and the oak.
+$heavy = get_term_by( 'slug', 'heavy', 'product_shipping_class' );
+if ( ! $heavy ) {
+	$inserted = wp_insert_term( 'Heavy', 'product_shipping_class', array( 'slug' => 'heavy' ) );
+	$heavy    = get_term( $inserted['term_id'], 'product_shipping_class' );
+}
+$heavy_id = (int) $heavy->term_id;
+
 smpshelf_seed_simple( 'SS-TILE', 'Sample Tile', 'sample-tile', 30, array( '_smpshelf_enabled' => 'yes' ) );
-smpshelf_seed_simple( 'SS-SLATE', 'Paid Slate', 'paid-slate', 50, array( '_smpshelf_enabled' => 'yes', '_smpshelf_price' => '2.50' ), array( 'set_weight' => '25' ) );
+smpshelf_seed_simple( 'SS-SLATE', 'Paid Slate', 'paid-slate', 50, array( '_smpshelf_enabled' => 'yes', '_smpshelf_price' => '2.50' ), array( 'set_weight' => '25', 'set_shipping_class_id' => $heavy_id ) );
 smpshelf_seed_simple( 'SS-MUG', 'Plain Mug', 'plain-mug', 9 );
 smpshelf_seed_simple(
 	'SS-LINEN',
@@ -90,6 +98,8 @@ $attribute->set_visible( true );
 $attribute->set_variation( true );
 $oak->set_attributes( array( $attribute ) );
 $oak->update_meta_data( '_smpshelf_enabled', 'yes' );
+$oak->set_shipping_class_id( $heavy_id );
+$oak->set_weight( '20' );
 $oak_id = $oak->save();
 foreach ( array( 'Natural' => '40', 'Grey' => '45' ) as $finish => $price ) {
 	$variation = new WC_Product_Variation();
@@ -131,7 +141,7 @@ $zone->add_location( 'GB', 'country' );
 $zone->save();
 $instance_id = $zone->add_shipping_method( 'flat_rate' );
 $method      = WC_Shipping_Zones::get_shipping_method( $instance_id );
-update_option( $method->get_instance_option_key(), array( 'title' => 'Flat rate', 'tax_status' => 'none', 'cost' => '5' ) );
+update_option( $method->get_instance_option_key(), array( 'title' => 'Flat rate', 'tax_status' => 'none', 'cost' => '5', 'type' => 'class', 'class_cost_' . $heavy_id => '50' ) );
 
 flush_rewrite_rules();
 // WP-CLI can't detect mod_rewrite, so write Apache's rules ourselves (wp-env serves via Apache).

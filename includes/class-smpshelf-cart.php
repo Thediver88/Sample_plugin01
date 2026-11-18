@@ -53,6 +53,7 @@ class Smpshelf_Cart {
 	public static function init() {
 		// Runs before Cut & Pack's own check (priority 10) so its skip filter sees our approval.
 		add_filter( 'woocommerce_add_to_cart_validation', array( __CLASS__, 'validate' ), 5, 6 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( __CLASS__, 'drop_failed_approval' ), PHP_INT_MAX, 2 );
 		add_filter( 'woocommerce_add_to_cart_quantity', array( __CLASS__, 'quantity' ), 20, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( __CLASS__, 'add_item_data' ), 10, 3 );
 		add_action( 'woocommerce_add_to_cart', array( __CLASS__, 'line_added' ), 10, 2 );
@@ -209,6 +210,20 @@ class Smpshelf_Cart {
 	}
 
 	/**
+	 * If a later check refused the add, the approval must not survive to another add of the same product.
+	 *
+	 * @param bool $passed     Whether all checks passed.
+	 * @param int  $product_id Product ID.
+	 * @return bool
+	 */
+	public static function drop_failed_approval( $passed, $product_id ) {
+		if ( ! $passed ) {
+			unset( self::$approved[ absint( $product_id ) ] );
+		}
+		return $passed;
+	}
+
+	/**
 	 * Whether the product in this request was approved as a sample.
 	 *
 	 * @param int $product_id Parent product ID.
@@ -335,6 +350,22 @@ class Smpshelf_Cart {
 			return $item;
 		}
 		self::$sample_objects[ spl_object_id( $item['data'] ) ] = $item['data'];
+		if ( $item['data'] instanceof WC_Product_Variation ) {
+			// A variation falls back to its parent's weight, size and shipping class when its own are empty,
+			// after our getter filters have run. Empty the parent's values on this object too.
+			$item['data']->set_parent_data(
+				array_merge(
+					$item['data']->get_parent_data(),
+					array(
+						'weight'            => '',
+						'length'            => '',
+						'width'             => '',
+						'height'            => '',
+						'shipping_class_id' => Smpshelf_Settings::shipping_class_id(),
+					)
+				)
+			);
+		}
 		$item['data']->set_price( self::sample_price( $item ) );
 		$item['quantity'] = 1;
 		return $item;
@@ -463,11 +494,13 @@ class Smpshelf_Cart {
 			}
 			$name = $item['data'] instanceof WC_Product ? $item['data']->get_name() : '';
 			$cart->remove_cart_item( $key );
-			wc_add_notice(
-				/* translators: %s: product name */
-				sprintf( __( 'The sample of "%s" is no longer available and was removed from your cart.', 'sample-shelf-for-woocommerce' ), $name ),
-				'notice'
-			);
+			if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+				wc_add_notice(
+					/* translators: %s: product name */
+					sprintf( __( 'The sample of "%s" is no longer available and was removed from your cart.', 'sample-shelf-for-woocommerce' ), $name ),
+					'notice'
+				);
+			}
 		}
 	}
 
