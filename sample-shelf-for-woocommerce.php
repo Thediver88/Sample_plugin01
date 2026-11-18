@@ -11,7 +11,6 @@
  * License:              GPL-2.0-or-later
  * License URI:          https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:          sample-shelf-for-woocommerce
- * Domain Path:          /languages
  * WC requires at least: 10.0
  * WC tested up to:      11.2
  *

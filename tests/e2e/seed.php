@@ -21,3 +21,8 @@ $product->set_regular_price( '30' );
 $product->set_status( 'publish' );
 $product->save();
 flush_rewrite_rules();
+// WP-CLI can't detect mod_rewrite, so write Apache's rules ourselves (wp-env serves via Apache).
+file_put_contents(
+	ABSPATH . '.htaccess',
+	"# BEGIN WordPress\n<IfModule mod_rewrite.c>\nRewriteEngine On\nRewriteBase /\nRewriteRule ^index\\.php$ - [L]\nRewriteCond %{REQUEST_FILENAME} !-f\nRewriteCond %{REQUEST_FILENAME} !-d\nRewriteRule . /index.php [L]\n</IfModule>\n# END WordPress\n"
+);
