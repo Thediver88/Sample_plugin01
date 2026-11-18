@@ -133,4 +133,17 @@ class SettingsTest extends TestCase {
 		$this->assertTrue( '' !== Smpshelf_Settings::problem( 20, 23 ) );
 		$this->assertTrue( '' !== Smpshelf_Settings::problem( 20, 12345 ) );
 	}
+
+	/**
+	 * The per-order limit comes from the shop setting, with a safe default.
+	 */
+	public function test_max_per_order() {
+		$this->assertSame( 5, Smpshelf_Settings::max_per_order() );
+		$GLOBALS['smpshelf_options']['smpshelf_max_per_order'] = '7';
+		$this->assertSame( 7, Smpshelf_Settings::max_per_order() );
+		$GLOBALS['smpshelf_options']['smpshelf_max_per_order'] = '0';
+		$this->assertSame( 1, Smpshelf_Settings::max_per_order() );
+		$GLOBALS['smpshelf_options']['smpshelf_max_per_order'] = 'lots';
+		$this->assertSame( 5, Smpshelf_Settings::max_per_order() );
+	}
 }

@@ -17,6 +17,9 @@ function get_option( $name, $default = false ) {
 function __( $text ) {
 	return $text;
 }
+function apply_filters( $hook, $value ) {
+	return $value;
+}
 function absint( $n ) {
 	return abs( (int) $n );
 }

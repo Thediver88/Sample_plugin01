@@ -48,6 +48,13 @@ class Smpshelf_Cart {
 	private static $last_added = 0;
 
 	/**
+	 * Sample price per product ID, for this request (the getter filters run many times).
+	 *
+	 * @var float[]
+	 */
+	private static $price_cache = array();
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -350,6 +357,7 @@ class Smpshelf_Cart {
 			return $item;
 		}
 		self::$sample_objects[ spl_object_id( $item['data'] ) ] = $item['data'];
+		self::$price_cache                                      = array();
 		if ( $item['data'] instanceof WC_Product_Variation ) {
 			// A variation falls back to its parent's weight, size and shipping class when its own are empty,
 			// after our getter filters have run. Empty the parent's values on this object too.
@@ -411,7 +419,11 @@ class Smpshelf_Cart {
 			case 'woocommerce_product_variation_get_price':
 			case 'woocommerce_product_get_regular_price':
 			case 'woocommerce_product_variation_get_regular_price':
-				return (string) Smpshelf_Settings::price_for( $product );
+				$id = $product->get_id();
+				if ( ! isset( self::$price_cache[ $id ] ) ) {
+					self::$price_cache[ $id ] = Smpshelf_Settings::price_for( $product );
+				}
+				return (string) self::$price_cache[ $id ];
 			case 'woocommerce_product_get_sale_price':
 			case 'woocommerce_product_variation_get_sale_price':
 				return '';

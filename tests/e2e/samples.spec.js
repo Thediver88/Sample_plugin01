@@ -264,6 +264,56 @@ test.describe( 'Block cart', () => {
 	} );
 } );
 
+test.describe( 'Edge cases that need a test helper', () => {
+	test( 'a sample whose product is switched off meanwhile is removed from the cart', async ( { page, context, baseURL } ) => {
+		await postSample( page, URL.tile );
+		await expect( await cartRows( page ) ).toHaveCount( 1 );
+		await context.addCookies( [ { name: 'smpshelf_test_off', value: '1', url: baseURL } ] );
+		await page.goto( '/classic-cart/' );
+		await expect( page.locator( 'tr.cart_item' ) ).toHaveCount( 0 );
+		await expect( page.locator( 'body' ) ).toContainText( 'no longer available' );
+	} );
+
+	test( 'a sample has no weight, a full product keeps its weight (simple and variation)', async ( { page } ) => {
+		await postSample( page, URL.slate ); // 25 kg product.
+		const variations = await oakVariations( page );
+		const parent = await oakParentId( page );
+		const grey = variations.Grey; // 20 kg parent.
+		await page.request.post( URL.oak, { form: { 'add-to-cart': parent, variation_id: grey.id, ...grey.attributes, quantity: '1', smpshelf_sample: '1' } } );
+		await page.goto( '/classic-cart/?smpshelf_weight=1' );
+		await expect( page.locator( 'tr.cart_item' ) ).toHaveCount( 2 );
+		await expect( page.locator( '#smpshelf-test-weight' ) ).toHaveText( 'weight=0' );
+
+		const id = await productId( page, URL.slate );
+		await page.request.post( URL.slate, { form: { 'add-to-cart': id, quantity: '1' } } );
+		await page.goto( '/classic-cart/?smpshelf_weight=1' );
+		await expect( page.locator( '#smpshelf-test-weight' ) ).toHaveText( 'weight=25' );
+	} );
+
+	test( 'a paid sample in a shop that enters prices including tax: £2.50 includes £0.42 VAT', async ( { page, context, baseURL } ) => {
+		await context.addCookies( [ { name: 'smpshelf_test_tax', value: '1', url: baseURL } ] );
+		await postSample( page, URL.slate );
+		await page.goto( '/classic-cart/' );
+		await expect( page.locator( 'tr.cart_item .product-subtotal' ) ).toContainText( '£2.50' );
+		await expect( page.locator( '.cart_totals' ) ).toContainText( '£0.42' );
+	} );
+
+	test( '"Order again" on a completed order restores the sample as a sample and the normal line at full price', async ( { page } ) => {
+		await page.goto( '/my-account/' );
+		await page.locator( '#username' ).fill( 'shopper' );
+		await page.locator( '#password' ).fill( 'shopper-pass-123' );
+		await page.locator( 'button[name="login"]' ).click();
+		await page.locator( 'a[href*="view-order"]' ).first().click();
+		await page.locator( 'a.order-again, .order-again a, a:has-text("Order again")' ).first().click();
+		await page.goto( '/classic-cart/' );
+		const rows = page.locator( 'tr.cart_item' );
+		await expect( rows ).toHaveCount( 2 );
+		await expect( page.locator( 'tr.cart_item .product-subtotal', { hasText: '£60.00' } ) ).toHaveCount( 1 ); // 2 × £30, a normal line.
+		await expect( page.locator( 'tr.cart_item .product-subtotal', { hasText: '£0.00' } ) ).toHaveCount( 1 ); // The sample.
+		await expect( page.locator( 'tr.cart_item dd.variation-Sample' ) ).toHaveCount( 1 );
+	} );
+} );
+
 test.describe( 'Block cart and checkout (Store API)', () => {
 	test( 'the Store API will not raise a sample line above one', async ( { page } ) => {
 		await postSample( page, URL.tile );

@@ -143,6 +143,68 @@ $instance_id = $zone->add_shipping_method( 'flat_rate' );
 $method      = WC_Shipping_Zones::get_shipping_method( $instance_id );
 update_option( $method->get_instance_option_key(), array( 'title' => 'Flat rate', 'tax_status' => 'none', 'cost' => '5', 'type' => 'class', 'class_cost_' . $heavy_id => '50' ) );
 
+// A 20% UK VAT rate. It only applies in tests that switch taxes on (see the test add-on below).
+global $wpdb;
+$wpdb->query( "DELETE FROM {$wpdb->prefix}woocommerce_tax_rates" );
+WC_Tax::_insert_tax_rate(
+	array(
+		'tax_rate_country'  => 'GB',
+		'tax_rate'          => '20.0000',
+		'tax_rate_name'     => 'VAT',
+		'tax_rate_priority' => 1,
+		'tax_rate_compound' => 0,
+		'tax_rate_shipping' => 0,
+		'tax_rate_order'    => 1,
+		'tax_rate_class'    => '',
+	)
+);
+
+// Test-only add-on (mu-plugin): switches on conditions from cookies/query strings so tests can reach states
+// that need an admin. It is never shipped.
+wp_mkdir_p( WPMU_PLUGIN_DIR );
+file_put_contents(
+	WPMU_PLUGIN_DIR . '/smpshelf-test-helper.php',
+	<<<'PHPCODE'
+<?php
+// Cookie smpshelf_test_off=1: samples are switched off everywhere.
+add_filter( 'smpshelf_product_enabled', function ( $on ) { return ! empty( $_COOKIE['smpshelf_test_off'] ) ? false : $on; } );
+// Cookie smpshelf_test_tax=1: prices are entered and shown including 20% VAT.
+if ( ! empty( $_COOKIE['smpshelf_test_tax'] ) ) {
+	add_filter( 'pre_option_woocommerce_calc_taxes', function () { return 'yes'; } );
+	add_filter( 'pre_option_woocommerce_prices_include_tax', function () { return 'yes'; } );
+	add_filter( 'pre_option_woocommerce_tax_display_cart', function () { return 'incl'; } );
+}
+// ?smpshelf_weight=1 on any page prints the cart's total weight.
+add_action( 'wp_footer', function () {
+	if ( ! empty( $_GET['smpshelf_weight'] ) && function_exists( 'WC' ) && WC()->cart ) {
+		echo '<div id="smpshelf-test-weight">weight=' . esc_html( (string) (float) WC()->cart->get_cart_contents_weight() ) . '</div>';
+	}
+} );
+PHPCODE
+);
+
+// A customer with a completed order holding one sample and two normal Sample Tiles, for "Order again".
+$shopper = get_user_by( 'login', 'shopper' );
+if ( ! $shopper ) {
+	$shopper_id = wp_create_user( 'shopper', 'shopper-pass-123', 'shopper@example.com' );
+} else {
+	$shopper_id = $shopper->ID;
+}
+foreach ( wc_get_orders( array( 'customer_id' => $shopper_id, 'limit' => -1 ) ) as $old_order ) {
+	$old_order->delete( true );
+}
+$tile    = wc_get_product( wc_get_product_id_by_sku( 'SS-TILE' ) );
+$order   = wc_create_order( array( 'customer_id' => $shopper_id ) );
+$normal  = $order->add_product( $tile, 2 );
+$sample  = $order->add_product( $tile, 1, array( 'subtotal' => 0, 'total' => 0 ) );
+wc_add_order_item_meta( $sample, '_smpshelf_sample', 'yes' );
+wc_add_order_item_meta( $sample, 'Sample', 'Yes' );
+$order->set_address( array( 'first_name' => 'Sho', 'last_name' => 'Pper', 'country' => 'GB', 'email' => 'shopper@example.com' ), 'billing' );
+$order->calculate_totals( false );
+$order->set_status( 'completed' );
+$order->save();
+update_option( 'smpshelf_test_order_id', $order->get_id() );
+
 flush_rewrite_rules();
 // WP-CLI can't detect mod_rewrite, so write Apache's rules ourselves (wp-env serves via Apache).
 file_put_contents(

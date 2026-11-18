@@ -139,10 +139,17 @@ class Smpshelf_Settings {
 	 */
 	public static function is_switched_on( $parent_product ) {
 		$choice = self::normalize_choice( $parent_product->get_meta( self::META_ENABLED ) );
-		if ( '' === $choice ) {
-			return 'yes' === get_option( self::OPT_ENABLED, 'no' );
-		}
-		return 'yes' === $choice;
+		$on     = '' === $choice ? 'yes' === get_option( self::OPT_ENABLED, 'no' ) : 'yes' === $choice;
+
+		/**
+		 * Filter whether samples are switched on for a product.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param bool       $on             Whether samples are on (from the product and shop settings).
+		 * @param WC_Product $parent_product Parent (or simple) product.
+		 */
+		return (bool) apply_filters( 'smpshelf_product_enabled', $on, $parent_product );
 	}
 
 	/**
