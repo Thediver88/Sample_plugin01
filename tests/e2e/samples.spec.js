@@ -264,6 +264,48 @@ test.describe( 'Block cart', () => {
 	} );
 } );
 
+test.describe( 'Block cart and checkout (Store API)', () => {
+	test( 'the Store API will not raise a sample line above one', async ( { page } ) => {
+		await postSample( page, URL.tile );
+		await page.goto( '/cart/' );
+		await page.locator( '.wc-block-cart-items' ).waitFor();
+		const quantities = await page.evaluate( async () => {
+			const api = window.wp.apiFetch;
+			const before = await api( { path: '/wc/store/v1/cart' } );
+			try {
+				await api( { path: '/wc/store/v1/cart/update-item', method: 'POST', data: { key: before.items[ 0 ].key, quantity: 3 } } );
+			} catch ( e ) {
+				// A refusal is fine too; the cart is read again below.
+			}
+			const after = await api( { path: '/wc/store/v1/cart' } );
+			return after.items.map( ( item ) => item.quantity );
+		} );
+		expect( quantities ).toEqual( [ 1 ] );
+	} );
+
+	test( 'a block-checkout order records the sample and takes no stock', async ( { page } ) => {
+		await postSample( page, URL.linen );
+		await page.goto( '/checkout/' );
+		await page.locator( '.wc-block-checkout' ).waitFor();
+		const redirect = await page.evaluate( async () => {
+			const billing = { first_name: 'Sam', last_name: 'Ple', address_1: '1 Test Street', address_2: '', city: 'London', state: '', postcode: 'SW1A 1AA', country: 'GB', email: 'sample@example.com', phone: '07700900123' };
+			const shipping = { ...billing };
+			delete shipping.email;
+			const res = await window.wp.apiFetch( {
+				path: '/wc/store/v1/checkout',
+				method: 'POST',
+				data: { billing_address: billing, shipping_address: shipping, payment_method: 'cod', payment_data: [] },
+			} );
+			return res.payment_result ? res.payment_result.redirect_url : '';
+		} );
+		expect( redirect ).toContain( 'order-received' );
+		await page.goto( redirect );
+		await expect( page.locator( 'body' ) ).toContainText( /Sample:\s*Yes/, { timeout: 30000 } );
+		await page.goto( URL.linen );
+		await expect( page.locator( '.stock' ).first() ).toContainText( '3 in stock' );
+	} );
+} );
+
 test.describe( 'Classic checkout', () => {
 	test( 'an order with a sample is placed, the sample is recorded and no stock is taken', async ( { page } ) => {
 		await postSample( page, URL.linen );
