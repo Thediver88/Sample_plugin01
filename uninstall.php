@@ -22,7 +22,12 @@ function smpshelf_uninstall_site() {
 }
 
 if ( is_multisite() ) {
-	foreach ( get_sites( array( 'fields' => 'ids' ) ) as $smpshelf_site_id ) {
+	foreach ( get_sites(
+		array(
+			'fields' => 'ids',
+			'number' => 0,
+		)
+	) as $smpshelf_site_id ) {
 		switch_to_blog( $smpshelf_site_id );
 		smpshelf_uninstall_site();
 		restore_current_blog();

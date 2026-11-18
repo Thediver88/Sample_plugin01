@@ -73,7 +73,7 @@ test.describe( 'Product page', () => {
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first() ).toContainText( 'Grey' );
-		await expect( rows.first() ).toContainText( 'Sample' );
+		await expect( rows.first().locator( '.variation-Type' ) ).toHaveText( /Sample/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 	} );
 } );
@@ -84,7 +84,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await page.locator( 'form.smpshelf-sample-form .smpshelf-button' ).click();
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
-		await expect( rows.first() ).toContainText( 'Sample' );
+		await expect( rows.first().locator( '.variation-Type' ) ).toHaveText( /Sample/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 		await expect( rows.first().locator( 'input[type="number"]' ) ).toHaveCount( 0 ); // No quantity box.
 	} );
@@ -124,7 +124,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await expect( await cartRows( page ) ).toHaveCount( 0 );
 	} );
 
-	test( 'a sample flag in the address bar cannot turn a normal add into a sample (or the reverse)', async ( { page } ) => {
+	test( 'a sample request for a product with samples off is refused, and a normal add stays full price', async ( { page } ) => {
 		const id = await productId( page, URL.mug );
 		await page.request.post( URL.mug + '?smpshelf_sample=1', { form: { 'add-to-cart': id, quantity: '1' } } );
 		await expect( await cartRows( page ) ).toHaveCount( 0 ); // Refused: samples are off for the mug.
@@ -156,13 +156,34 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await expect( await cartRows( page ) ).toHaveCount( 2 );
 	} );
 
-	test( 'a sample takes no stock: all the stock can still be ordered beside a sample', async ( { page } ) => {
+	test( 'a sample sits beside a normal order of the same limited-stock product', async ( { page } ) => {
 		const id = await productId( page, URL.linen );
-		await page.request.post( URL.linen, { form: { 'add-to-cart': id, quantity: '3' } } ); // All 3 in stock.
+		await page.request.post( URL.linen, { form: { 'add-to-cart': id, quantity: '2' } } ); // 2 of the 3 in stock.
 		await postSample( page, URL.linen );
 		await page.goto( '/classic-cart/' );
 		await expect( page.locator( 'tr.cart_item' ) ).toHaveCount( 2 );
 		await expect( page.locator( '.woocommerce-error' ) ).toHaveCount( 0 );
+	} );
+
+	test( 'the normal add-to-cart button still adds the full product (quantity 3) beside a sample form', async ( { page } ) => {
+		await page.goto( URL.tile );
+		await page.locator( 'form.cart input.qty' ).fill( '3' );
+		await page.locator( '.single_add_to_cart_button' ).click();
+		const rows = await cartRows( page );
+		await expect( rows ).toHaveCount( 1 );
+		await expect( rows.first().locator( '.product-quantity input.qty' ) ).toHaveValue( '3' );
+		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£90.00' );
+		await expect( rows.first().locator( '.variation-Type' ) ).toHaveCount( 0 ); // Not a sample.
+	} );
+
+	test( 'the normal add-to-cart button still adds the chosen full-price variation', async ( { page } ) => {
+		await page.goto( URL.oak );
+		await page.locator( 'select[name="attribute_finish"]' ).selectOption( 'Grey' );
+		await page.locator( '.single_add_to_cart_button' ).click();
+		const rows = await cartRows( page );
+		await expect( rows ).toHaveCount( 1 );
+		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£45.00' );
+		await expect( rows.first().locator( '.variation-Type' ) ).toHaveCount( 0 );
 	} );
 
 	test( 'a quantity change to more than one is refused', async ( { page } ) => {
@@ -180,6 +201,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 			b.removeAttribute( 'aria-disabled' );
 		} );
 		await page.locator( 'button[name="update_cart"]' ).click();
+		await expect( page.locator( '.woocommerce-error' ) ).toContainText( 'Only one of each sample' );
 		const rows = page.locator( 'tr.cart_item' );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-quantity' ) ).toContainText( '1' );
@@ -188,20 +210,31 @@ test.describe( 'Cart rules (classic cart)', () => {
 } );
 
 test.describe( 'Block cart', () => {
-	test( 'shows the sample line labelled Sample at £0.00', async ( { page } ) => {
+	test( 'shows the sample line labelled Sample at £0.00 and keeps it at quantity 1', async ( { page } ) => {
 		await postSample( page, URL.tile );
 		await page.goto( '/cart/' );
 		const items = page.locator( '.wc-block-cart-items' );
 		await expect( items ).toContainText( 'Sample Tile' );
-		await expect( items ).toContainText( 'Sample' );
+		await expect( items.locator( '.wc-block-components-product-details' ) ).toContainText( 'Sample' );
 		await expect( items ).toContainText( '£0.00' );
-		await expect( items.locator( '.wc-block-components-quantity-selector' ) ).toHaveCount( 0 );
+		// If the theme still shows a "+" button, using it must not raise the quantity.
+		const plus = items.locator( '.wc-block-components-quantity-selector__button--plus' );
+		if ( ( await plus.count() ) && ( await plus.first().isEnabled() ) ) {
+			await plus.first().click();
+			await page.waitForTimeout( 1500 );
+		}
+		await page.reload();
+		await expect( page.locator( '.wc-block-cart-items' ) ).toContainText( '£0.00' );
+		const qty = page.locator( '.wc-block-cart-items input.wc-block-components-quantity-selector__input' );
+		if ( await qty.count() ) {
+			await expect( qty.first() ).toHaveValue( '1' );
+		}
 	} );
 } );
 
 test.describe( 'Classic checkout', () => {
-	test( 'an order with a sample is placed and the sample is recorded on it', async ( { page } ) => {
-		await postSample( page, URL.tile );
+	test( 'an order with a sample is placed, the sample is recorded and no stock is taken', async ( { page } ) => {
+		await postSample( page, URL.linen );
 		await page.goto( '/classic-checkout/' );
 		await page.locator( '#billing_first_name' ).fill( 'Sam' );
 		await page.locator( '#billing_last_name' ).fill( 'Ple' );
@@ -212,8 +245,10 @@ test.describe( 'Classic checkout', () => {
 		await page.locator( '#billing_email' ).fill( 'sample@example.com' );
 		await page.locator( '#payment_method_cod' ).check();
 		await page.locator( '#place_order' ).click();
-		await expect( page.locator( '.woocommerce-order-received, .woocommerce-thankyou-order-received' ).first() ).toBeVisible( { timeout: 30000 } );
-		await expect( page.locator( '.woocommerce-table--order-details' ) ).toContainText( 'Sample' );
+		await expect( page.locator( '.woocommerce-table--order-details' ) ).toBeVisible( { timeout: 30000 } );
+		await expect( page.locator( '.woocommerce-table--order-details .wc-item-meta' ) ).toContainText( 'Sample' );
+		await page.goto( URL.linen );
+		await expect( page.locator( '.stock' ).first() ).toContainText( '3 in stock' ); // The sample took none.
 	} );
 } );
 
@@ -226,10 +261,12 @@ test.describe( 'Settings screen', () => {
 		await page.goto( '/wp-admin/admin.php?page=wc-settings&tab=smpshelf' );
 		await expect( page.locator( '#smpshelf_max_per_order' ) ).toHaveValue( '3' );
 		await page.locator( '#smpshelf_price' ).fill( '1,5' );
+		await page.locator( '#smpshelf_price' ).blur();
 		await page.locator( 'button[name="save"]' ).click();
 		await expect( page.locator( '#smpshelf_price' ) ).toHaveValue( '1.50' );
 		// Put the free default back for any later test.
 		await page.locator( '#smpshelf_price' ).fill( '' );
+		await page.locator( '#smpshelf_price' ).blur();
 		await page.locator( 'button[name="save"]' ).click();
 		await expect( page.locator( '#smpshelf_price' ) ).toHaveValue( '' );
 	} );

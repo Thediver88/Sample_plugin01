@@ -22,11 +22,21 @@ class Smpshelf_Frontend {
 	private static $printed = array();
 
 	/**
+	 * How many "Add to Cart with Options" blocks are being rendered right now. Inside that block
+	 * WooCommerce fires the after-form hook INSIDE its own form, where a second form must not be printed.
+	 *
+	 * @var int
+	 */
+	private static $in_options_block = 0;
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
 		add_action( 'woocommerce_after_add_to_cart_form', array( __CLASS__, 'render_after_form' ) );
 		add_filter( 'render_block_woocommerce/add-to-cart-form', array( __CLASS__, 'render_after_block' ), 10, 3 );
+		add_filter( 'pre_render_block', array( __CLASS__, 'block_start' ), 10, 2 );
+		add_filter( 'render_block_woocommerce/add-to-cart-with-options', array( __CLASS__, 'render_after_options_block' ), 10, 3 );
 	}
 
 	/**
@@ -34,9 +44,39 @@ class Smpshelf_Frontend {
 	 */
 	public static function render_after_form() {
 		global $product;
+		if ( self::$in_options_block > 0 ) {
+			return;
+		}
 		if ( $product instanceof WC_Product ) {
 			echo self::form( $product ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside form().
 		}
+	}
+
+	/**
+	 * Note that an "Add to Cart with Options" block started rendering.
+	 *
+	 * @param string|null $pre_render Value passed through.
+	 * @param array       $block      Parsed block.
+	 * @return string|null
+	 */
+	public static function block_start( $pre_render, $block ) {
+		if ( null === $pre_render && is_array( $block ) && isset( $block['blockName'] ) && 'woocommerce/add-to-cart-with-options' === $block['blockName'] ) {
+			++self::$in_options_block;
+		}
+		return $pre_render;
+	}
+
+	/**
+	 * Print the sample form after (never inside) the "Add to Cart with Options" block.
+	 *
+	 * @param string   $content  Block HTML.
+	 * @param array    $block    Parsed block.
+	 * @param WP_Block $instance Block instance.
+	 * @return string
+	 */
+	public static function render_after_options_block( $content, $block = array(), $instance = null ) {
+		self::$in_options_block = max( 0, self::$in_options_block - 1 );
+		return self::render_after_block( $content, $block, $instance );
 	}
 
 	/**
@@ -80,13 +120,13 @@ class Smpshelf_Frontend {
 
 		wp_enqueue_style( 'smpshelf-sample', SMPSHELF_URL . 'assets/css/sample.css', array(), SMPSHELF_VERSION );
 		if ( $variable ) {
-			wp_enqueue_script( 'smpshelf-sample', SMPSHELF_URL . 'assets/js/sample.js', array( 'jquery' ), SMPSHELF_VERSION, true );
+			wp_enqueue_script( 'smpshelf-sample', SMPSHELF_URL . 'assets/js/sample.js', array(), SMPSHELF_VERSION, true );
 		}
 
 		$label = Smpshelf_Settings::button_text();
 		$price = Smpshelf_Settings::price_for( $product );
 		if ( $price > 0 ) {
-			$label .= ' (' . wp_strip_all_tags( wc_price( $price ) ) . ')';
+			$label .= ' (' . wp_strip_all_tags( wc_price( wc_get_price_to_display( $product, array( 'price' => $price ) ) ) ) . ')';
 		}
 
 		ob_start();
@@ -101,7 +141,7 @@ class Smpshelf_Frontend {
 			<?php endif; ?>
 			<button type="submit" class="button smpshelf-button"<?php echo $variable ? ' disabled aria-disabled="true"' : ''; ?>><?php echo esc_html( $label ); ?></button>
 			<?php if ( $variable ) : ?>
-				<span class="smpshelf-hint"><?php esc_html_e( 'Choose an option first.', 'sample-shelf-for-woocommerce' ); ?></span>
+				<span class="smpshelf-hint" aria-live="polite"><?php esc_html_e( 'Choose an option first.', 'sample-shelf-for-woocommerce' ); ?></span>
 			<?php endif; ?>
 		</form>
 		<?php

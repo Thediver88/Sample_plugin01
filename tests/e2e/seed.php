@@ -109,6 +109,19 @@ function smpshelf_seed_page( $slug, $title, $content ) {
 smpshelf_seed_page( 'classic-cart', 'Classic Cart', '[woocommerce_cart]' );
 smpshelf_seed_page( 'classic-checkout', 'Classic Checkout', '[woocommerce_checkout]' );
 
+// One UK zone with a flat rate, so classic checkout offers payment methods.
+foreach ( WC_Shipping_Zones::get_zones() as $zone_data ) {
+	$old_zone = new WC_Shipping_Zone( $zone_data['id'] );
+	$old_zone->delete();
+}
+$zone = new WC_Shipping_Zone();
+$zone->set_zone_name( 'United Kingdom' );
+$zone->add_location( 'GB', 'country' );
+$zone->save();
+$instance_id = $zone->add_shipping_method( 'flat_rate' );
+$method      = WC_Shipping_Zones::get_shipping_method( $instance_id );
+update_option( $method->get_instance_option_key(), array( 'title' => 'Flat rate', 'tax_status' => 'none', 'cost' => '5' ) );
+
 flush_rewrite_rules();
 // WP-CLI can't detect mod_rewrite, so write Apache's rules ourselves (wp-env serves via Apache).
 file_put_contents(

@@ -1,41 +1,69 @@
 /**
- * Sample Shelf: on a variable product, copy the chosen option into the sample form.
+ * Sample Shelf: on a variable product, copy the option the shopper chose in the main form
+ * (variation id and attribute values, "any" attributes included) into the sample form.
  * The server re-checks everything; this only fills in the form and enables the button.
+ * It works with the classic variation form and with the Add to Cart with Options block.
  */
-( function ( $ ) {
+( function () {
 	'use strict';
 
-	$( function () {
-		var $sample = $( 'form.smpshelf-sample-form[data-smpshelf-variable]' );
-		var $main = $( 'form.variations_form' ).first();
-		if ( ! $sample.length || ! $main.length ) {
+	function init() {
+		var sample = document.querySelector( 'form.smpshelf-sample-form[data-smpshelf-variable]' );
+		if ( ! sample ) {
 			return;
 		}
-		var $button = $sample.find( '.smpshelf-button' );
-		var $hint = $sample.find( '.smpshelf-hint' );
-		var $attrs = $sample.find( '.smpshelf-attributes' );
-		var $id = $sample.find( '.smpshelf-variation-id' );
+		var button = sample.querySelector( '.smpshelf-button' );
+		var hint = sample.querySelector( '.smpshelf-hint' );
+		var attrs = sample.querySelector( '.smpshelf-attributes' );
+		var id = sample.querySelector( '.smpshelf-variation-id' );
+		var last = '';
 
-		function reset() {
-			$id.val( '' );
-			$attrs.empty();
-			$button.prop( 'disabled', true ).attr( 'aria-disabled', 'true' );
-			$hint.show();
+		function mainForm() {
+			return document.querySelector( 'form.variations_form' ) || document.querySelector( 'form.cart' );
 		}
 
-		$main.on( 'found_variation', function ( event, variation ) {
-			if ( ! variation || ! variation.variation_id || ! variation.is_purchasable || ! variation.is_in_stock ) {
-				reset();
+		function sync() {
+			var main = mainForm();
+			var field = main ? main.querySelector( 'input[name="variation_id"]' ) : null;
+			var chosen = field ? String( field.value || '' ) : '';
+			var pairs = [];
+			if ( chosen && '0' !== chosen && main ) {
+				main.querySelectorAll( '[name^="attribute_"]' ).forEach( function ( el ) {
+					pairs.push( [ el.name, el.value ] );
+				} );
+			}
+			var key = chosen + '|' + JSON.stringify( pairs );
+			if ( key === last ) {
 				return;
 			}
-			$id.val( variation.variation_id );
-			$attrs.empty();
-			$.each( variation.attributes || {}, function ( name, value ) {
-				$( '<input type="hidden">' ).attr( 'name', name ).val( value ).appendTo( $attrs );
+			last = key;
+			id.value = chosen && '0' !== chosen ? chosen : '';
+			attrs.textContent = '';
+			pairs.forEach( function ( pair ) {
+				var input = document.createElement( 'input' );
+				input.type = 'hidden';
+				input.name = pair[ 0 ];
+				input.value = pair[ 1 ];
+				attrs.appendChild( input );
 			} );
-			$button.prop( 'disabled', false ).removeAttr( 'aria-disabled' );
-			$hint.hide();
-		} );
-		$main.on( 'reset_data hide_variation', reset );
-	} );
-}( jQuery ) );
+			var ready = '' !== id.value;
+			button.disabled = ! ready;
+			if ( ready ) {
+				button.removeAttribute( 'aria-disabled' );
+			} else {
+				button.setAttribute( 'aria-disabled', 'true' );
+			}
+			hint.style.display = ready ? 'none' : '';
+		}
+
+		// Themes and blocks change the chosen option in different ways, so read it on a short timer.
+		window.setInterval( sync, 250 );
+		sync();
+	}
+
+	if ( 'loading' === document.readyState ) {
+		document.addEventListener( 'DOMContentLoaded', init );
+	} else {
+		init();
+	}
+}() );

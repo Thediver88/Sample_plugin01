@@ -41,6 +41,13 @@ class Smpshelf_Cart {
 	private static $sample_objects = array();
 
 	/**
+	 * Product ID of the sample line added in this request (for the "added to cart" message).
+	 *
+	 * @var int
+	 */
+	private static $last_added = 0;
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -48,6 +55,7 @@ class Smpshelf_Cart {
 		add_filter( 'woocommerce_add_to_cart_validation', array( __CLASS__, 'validate' ), 5, 6 );
 		add_filter( 'woocommerce_add_to_cart_quantity', array( __CLASS__, 'quantity' ), 20, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( __CLASS__, 'add_item_data' ), 10, 3 );
+		add_action( 'woocommerce_add_to_cart', array( __CLASS__, 'line_added' ), 10, 2 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( __CLASS__, 'order_again_data' ), 10, 2 );
 		add_filter( 'wc_add_to_cart_message_html', array( __CLASS__, 'added_message' ), 10, 2 );
 
@@ -78,7 +86,7 @@ class Smpshelf_Cart {
 
 		// Stock, coupons, labels and the order record.
 		add_filter( 'woocommerce_order_item_quantity', array( __CLASS__, 'order_item_stock_quantity' ), 10, 3 );
-		add_filter( 'woocommerce_cart_item_required_stock_is_not_enough', array( __CLASS__, 'stock_not_enough' ), 10, 3 );
+		add_filter( 'woocommerce_prevent_adjust_line_item_product_stock', array( __CLASS__, 'prevent_admin_stock_adjust' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( __CLASS__, 'coupon_valid' ), 10, 4 );
 		add_filter( 'woocommerce_get_item_data', array( __CLASS__, 'display_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( __CLASS__, 'save_order_item' ), 10, 3 );
@@ -142,6 +150,11 @@ class Smpshelf_Cart {
 			return $passed;
 		}
 		if ( ! $passed ) {
+			return false;
+		}
+		// Samples are requested through the sample form only, never through the REST / Store API add-item route.
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			wc_add_notice( __( 'Samples are not available for this product.', 'sample-shelf-for-woocommerce' ), 'error' );
 			return false;
 		}
 
@@ -215,6 +228,22 @@ class Smpshelf_Cart {
 	}
 
 	/**
+	 * The line is in the cart: the approval is used up, so it can't leak to another line of the same product
+	 * (for example in an "order again" loop).
+	 *
+	 * @param string $cart_item_key Cart item key (unused).
+	 * @param int    $product_id    Product ID.
+	 */
+	public static function line_added( $cart_item_key, $product_id ) {
+		unset( $cart_item_key );
+		$product_id = absint( $product_id );
+		if ( isset( self::$approved[ $product_id ] ) ) {
+			self::$last_added = $product_id;
+			unset( self::$approved[ $product_id ] );
+		}
+	}
+
+	/**
 	 * "Order again" on a sample order puts a sample back (it still goes through validation and the limits).
 	 *
 	 * @param array                 $data Cart item data.
@@ -258,7 +287,7 @@ class Smpshelf_Cart {
 	 * @return string
 	 */
 	public static function added_message( $message, $products ) {
-		if ( ! is_array( $products ) || 1 !== count( $products ) || ! self::is_approved( (int) key( $products ) ) ) {
+		if ( ! is_array( $products ) || 1 !== count( $products ) || ! self::$last_added || (int) key( $products ) !== self::$last_added ) {
 			return $message;
 		}
 		$product = wc_get_product( (int) key( $products ) );
@@ -266,7 +295,7 @@ class Smpshelf_Cart {
 			return $message;
 		}
 		return sprintf(
-			'<a href="%1$s" tabindex="1" class="button wc_forward">%2$s</a> %3$s',
+			'<a href="%1$s" class="button wc_forward">%2$s</a> %3$s',
 			esc_url( wc_get_cart_url() ),
 			esc_html__( 'View cart', 'sample-shelf-for-woocommerce' ),
 			esc_html(
@@ -468,7 +497,8 @@ class Smpshelf_Cart {
 	}
 
 	/**
-	 * Samples take no stock unless the owner turned that on.
+	 * Samples are not taken off the product's stock when the order is placed, unless the owner turned that on.
+	 * (While a sample sits in the cart, WooCommerce still counts it in its in-cart stock check.)
 	 *
 	 * @param int                   $quantity Quantity to reduce.
 	 * @param WC_Order              $order    Order.
@@ -484,38 +514,21 @@ class Smpshelf_Cart {
 	}
 
 	/**
-	 * Cart stock check: when samples take no stock, they must not count against the real order.
+	 * Editing a sample's order item in the admin must not take stock either.
 	 *
-	 * @param bool       $not_enough Whether WooCommerce thinks there is not enough stock.
-	 * @param WC_Product $product    Product.
-	 * @param array      $values     Cart item.
+	 * @param bool                  $prevent Current value.
+	 * @param WC_Order_Item_Product $item    Order item.
 	 * @return bool
 	 */
-	public static function stock_not_enough( $not_enough, $product, $values ) {
-		if ( Smpshelf_Settings::reduces_stock() || ! $not_enough ) {
-			return $not_enough;
+	public static function prevent_admin_stock_adjust( $prevent, $item ) {
+		if ( $item instanceof WC_Order_Item && 'yes' === $item->get_meta( self::ORDER_META ) && ! Smpshelf_Settings::reduces_stock() ) {
+			return true;
 		}
-		if ( self::is_sample_item( $values ) ) {
-			return false;
-		}
-		$managed_id = $product->get_stock_managed_by_id();
-		$in_cart    = WC()->cart->get_cart_item_quantities();
-		$samples    = 0;
-		foreach ( self::sample_lines() as $line ) {
-			if ( $line['data'] instanceof WC_Product && $line['data']->get_stock_managed_by_id() === $managed_id ) {
-				$samples += (int) $line['quantity'];
-			}
-		}
-		if ( ! $samples || ! isset( $in_cart[ $managed_id ] ) ) {
-			return $not_enough;
-		}
-		$order_id = WC()->session ? absint( WC()->session->get( 'order_awaiting_payment' ) ) : 0;
-		$held     = wc_get_held_stock_quantity( $product, $order_id );
-		return $product->get_stock_quantity() < ( $held + $in_cart[ $managed_id ] - $samples );
+		return $prevent;
 	}
 
 	/**
-	 * Coupons never apply to sample lines.
+	 * Percent and fixed-product coupons never apply to sample lines. (A fixed-cart coupon is taken off the whole cart by WooCommerce.)
 	 *
 	 * @param bool       $valid   Current value.
 	 * @param WC_Product $product Product.
