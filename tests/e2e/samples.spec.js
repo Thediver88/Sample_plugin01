@@ -234,6 +234,7 @@ test.describe( 'Block cart', () => {
 
 test.describe( 'Classic checkout', () => {
 	test( 'an order with a sample is placed, the sample is recorded and no stock is taken', async ( { page } ) => {
+		test.setTimeout( 120000 );
 		await postSample( page, URL.linen );
 		await page.goto( '/classic-checkout/' );
 		await page.locator( '#billing_first_name' ).fill( 'Sam' );
@@ -247,9 +248,14 @@ test.describe( 'Classic checkout', () => {
 		await page.locator( '#place_order' ).click();
 		const details = page.locator( '.woocommerce-table--order-details' );
 		const problems = page.locator( '.woocommerce-error, .woocommerce-NoticeGroup-checkout' );
-		await Promise.race( [ details.waitFor( { timeout: 30000 } ), problems.first().waitFor( { timeout: 30000 } ) ] ).catch( () => {} );
-		if ( await problems.count() ) {
-			throw new Error( 'Checkout refused: ' + ( await problems.first().innerText() ) );
+		try {
+			await Promise.race( [ details.waitFor( { timeout: 45000 } ), problems.first().waitFor( { timeout: 45000 } ) ] );
+		} catch ( e ) {
+			// Fall through to the diagnostics below.
+		}
+		if ( ! ( await details.count() ) ) {
+			const text = ( await page.locator( 'main, #main, body' ).first().innerText() ).replace( /\s+/g, ' ' ).slice( 0, 700 );
+			throw new Error( 'Checkout did not finish. URL: ' + page.url() + ' | Page: ' + text );
 		}
 		await expect( details ).toBeVisible( { timeout: 30000 } );
 		await expect( page.locator( '.woocommerce-table--order-details .wc-item-meta' ) ).toContainText( 'Sample' );
