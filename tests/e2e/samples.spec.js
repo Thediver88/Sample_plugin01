@@ -179,6 +179,8 @@ test.describe( 'Cart rules (classic cart)', () => {
 	test( 'the normal add-to-cart button still adds the chosen full-price variation', async ( { page } ) => {
 		await page.goto( URL.oak );
 		await page.locator( 'select[name="attribute_finish"]' ).selectOption( 'Grey' );
+		await expect( page.locator( 'form.variations_form input[name="variation_id"]' ) ).not.toHaveValue( /^(0)?$/ ); // The option was found.
+		await expect( page.locator( '.single_add_to_cart_button' ) ).toBeEnabled();
 		await page.locator( '.single_add_to_cart_button' ).click();
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
@@ -303,6 +305,7 @@ test.describe( 'Edge cases that need a test helper', () => {
 		await page.locator( '#username' ).fill( 'shopper' );
 		await page.locator( '#password' ).fill( 'shopper-pass-123' );
 		await page.locator( 'button[name="login"]' ).click();
+		await page.goto( '/my-account/orders/' );
 		await page.locator( 'a[href*="view-order"]' ).first().click();
 		await page.locator( 'a.order-again, .order-again a, a:has-text("Order again")' ).first().click();
 		await page.goto( '/classic-cart/' );
