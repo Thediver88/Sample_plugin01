@@ -1,0 +1,18 @@
+{
+  "name": "sample-shelf-for-woocommerce",
+  "private": true,
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "env:start": "wp-env start && npm run env:setup",
+    "env:setup": "wp-env run tests-cli wp plugin activate woocommerce sample-shelf-for-woocommerce && wp-env run tests-cli wp eval-file wp-content/plugins/sample-shelf-for-woocommerce/tests/e2e/seed.php",
+    "env:stop": "wp-env stop",
+    "env:reset": "wp-env clean tests && npm run env:setup",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "plugin-check": "wp-env run tests-cli wp plugin check sample-shelf-for-woocommerce --exclude-directories=tests,node_modules,vendor"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@wordpress/env": "^10.10.0"
+  }
+}

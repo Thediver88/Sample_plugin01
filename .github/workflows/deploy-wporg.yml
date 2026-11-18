@@ -1,0 +1,71 @@
+name: Publish to WordPress.org
+
+# Manual only. The owner clicks "Run workflow", checks the commit and leaves "Dry run" ticked for a practice run. Untick it to publish for real.
+# The SVN password lives in the repository secret SVN_PASSWORD (set by the owner, never by an agent).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit (or tag) to publish. Use the exact commit that was approved and tested'
+        required: true
+        default: 'main'
+      dry_run:
+        description: 'Practice run: do everything except the final upload'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the chosen commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Read the version and check the numbers agree
+        id: ver
+        run: |
+          set -euo pipefail
+          header=$(sed -n 's/^ \* Version:[[:space:]]*//p' sample-shelf-for-woocommerce.php | tr -d '\r')
+          const=$(sed -n "s/^define( 'SMPSHELF_VERSION', '\(.*\)' );/\1/p" sample-shelf-for-woocommerce.php)
+          stable=$(sed -n 's/^Stable tag:[[:space:]]*//p' readme.txt | tr -d '\r')
+          echo "header=$header constant=$const stable=$stable commit=$(git rev-parse HEAD)"
+          [ -n "$header" ] && [ "$header" = "$const" ] && [ "$header" = "$stable" ] || { echo "Version mismatch"; exit 1; }
+          grep -q "^= $header" readme.txt || { echo "No changelog entry for $header"; exit 1; }
+          version="$header"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build the plugin folder (only the files that ship)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/plugin"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/plugin"
+          ls -la "$RUNNER_TEMP/plugin"
+          # Nothing from the dev workflow may be published.
+          if find "$RUNNER_TEMP/plugin" -maxdepth 1 \( -name tests -o -name bin -o -name .github -o -name .claude -o -name CLAUDE.md -o -name composer.json -o -name .wordpress-org \) | grep .; then
+            echo "Dev files found in the build"; exit 1
+          fi
+
+      - name: Collect the store images (png only, no source files)
+        run: |
+          set -euo pipefail
+          mkdir -p .wporg-assets
+          cp .wordpress-org/*.png .wporg-assets/
+          ls -la .wporg-assets
+
+      - name: Publish to the WordPress.org plugin directory
+        uses: 10up/action-wordpress-plugin-deploy@2.3.0
+        with:
+          dry-run: ${{ inputs.dry_run }}
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          SLUG: sample-shelf-for-woocommerce
+          VERSION: ${{ steps.ver.outputs.version }}
+          BUILD_DIR: ${{ runner.temp }}/plugin
+          ASSETS_DIR: .wporg-assets

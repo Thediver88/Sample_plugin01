@@ -1,0 +1,22 @@
+{
+  "name": "cartwright/sample-shelf-for-woocommerce",
+  "description": "Free sample requests for WooCommerce.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require-dev": {
+    "phpunit/phpunit": "^9.6",
+    "wp-coding-standards/wpcs": "^3.1",
+    "phpcompatibility/phpcompatibility-wp": "^2.1",
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "phpcs",
+    "lint:fix": "phpcbf"
+  }
+}

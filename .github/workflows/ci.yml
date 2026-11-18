@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  php-syntax:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.0', '8.2', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '${{ matrix.php }}', tools: none, coverage: none }
+      - run: find . -name '*.php' -not -path './vendor/*' -not -path './tests/*' -print0 | xargs -0 -n1 php -l
+
+  standards-and-unit:
+    name: WPCS + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.3', tools: composer, coverage: none }
+      - run: .github/ci-step.sh "composer install" composer install --no-interaction --no-progress
+      - name: PHPCS (WordPress + PHP 7.4 compatibility)
+        run: .github/ci-step.sh "PHPCS" composer lint -- --report=full
+      - name: PHPUnit
+        run: .github/ci-step.sh "PHPUnit" composer test
+
+  build:
+    name: Build release ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash bin/build-zip.sh
+      - run: mkdir -p build && unzip -q dist/*.zip -d build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-zip
+          path: dist/*.zip
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-tree
+          path: build/
+          retention-days: 3
+
+  plugin-check:
+    name: Plugin Check (WordPress.org rules)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: release-tree, path: build }
+      - uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: build/sample-shelf-for-woocommerce
+          # Fail on warnings too: reviewers read them.
+          strict: true
+
+  e2e:
+    name: Cart & checkout (Playwright on wp-env)
+    # Pinned: ubuntu-latest is moving to Ubuntu 26, where Playwright's system deps fail to install.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: .github/ci-step.sh "npm install" npm install --no-audit --no-fund
+      - name: Check the runner's Google Chrome (used by Playwright in CI)
+        run: google-chrome --version
+      - name: Start test store (wp-env + seed)
+        run: .github/ci-step.sh "Start test store" npm run env:start
+      - name: Smoke-check the product page
+        run: .github/ci-step.sh "Smoke check" .github/smoke.sh
+      - name: Browser tests
+        run: .github/ci-step.sh "Browser tests" npm run test:e2e
+      - name: PHP errors logged during the tests
+        if: always()
+        run: |
+          npx wp-env run tests-cli bash -c 'cat wp-content/debug.log 2>/dev/null || true' | tee debug.log
+          ! grep -E "PHP (Fatal|Warning|Notice|Deprecated).*sample-shelf" debug.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

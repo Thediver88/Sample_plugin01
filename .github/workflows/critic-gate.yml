@@ -1,0 +1,50 @@
+name: Critic gate
+
+# Turns the critic's review comment into the required `critic` status that GitHub enforces.
+# The critic runs in its own scheduled Claude session and posts its report as a PR comment that
+# ends with `<!-- critic-reviewed: <sha> -->`. This workflow sets the `critic` status on the PR's
+# current head commit:
+#   success  — the newest critic comment for this exact commit says `VERDICT: APPROVE`
+#   failure  — it says anything else (APPROVE WITH CHANGES, BLOCK)
+#   pending  — the critic has not reviewed this commit yet (e.g. new commits were pushed)
+# Branch protection on main requires `critic` to be success, so nothing merges without it.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  gate:
+    if: github.event_name == 'pull_request' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set the critic status from the latest review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const number = context.payload.pull_request?.number ?? context.payload.issue.number;
+            const { owner, repo } = context.repo;
+            const pr = (await github.rest.pulls.get({ owner, repo, pull_number: number })).data;
+            const sha = pr.head.sha;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
+            const marker = `<!-- critic-reviewed: ${sha} -->`;
+            const reviews = comments.filter(c => (c.body || '').includes(marker));
+            let state = 'pending', description = 'Waiting for the critic to review this commit';
+            if (reviews.length) {
+              const body = reviews[reviews.length - 1].body;
+              const verdict = (body.match(/^\s*VERDICT:\s*(.+?)\s*$/gm) || []).pop() || '';
+              if (/^\s*VERDICT:\s*APPROVE\s*$/.test(verdict)) {
+                state = 'success'; description = 'Critic approved this commit';
+              } else {
+                state = 'failure'; description = (verdict.replace(/^\s*VERDICT:\s*/, '') || 'No verdict found').slice(0, 100);
+              }
+            }
+            await github.rest.repos.createCommitStatus({ owner, repo, sha, state, context: 'critic', description, target_url: pr.html_url });
+            core.info(`PR #${number} @ ${sha}: critic = ${state} (${description})`);
