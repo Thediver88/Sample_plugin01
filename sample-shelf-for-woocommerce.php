@@ -41,8 +41,17 @@ add_action(
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			return;
 		}
+		require_once SMPSHELF_PATH . 'includes/class-smpshelf-settings.php';
+		require_once SMPSHELF_PATH . 'includes/class-smpshelf-cart.php';
+		require_once SMPSHELF_PATH . 'includes/class-smpshelf-frontend.php';
+		Smpshelf_Cart::init();
+		Smpshelf_Frontend::init();
+		if ( is_admin() ) {
+			require_once SMPSHELF_PATH . 'includes/class-smpshelf-admin.php';
+			Smpshelf_Admin::init();
+		}
 		/**
-		 * Fires once Sample Shelf has loaded. The feature classes are added in later versions.
+		 * Fires once Sample Shelf has loaded.
 		 */
 		do_action( 'smpshelf_loaded' );
 	}

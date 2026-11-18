@@ -1,0 +1,3 @@
+.smpshelf-sample-form { margin: 0.75em 0; }
+.smpshelf-sample-form .smpshelf-button[disabled] { opacity: 0.6; cursor: not-allowed; }
+.smpshelf-sample-form .smpshelf-hint { margin-left: 0.5em; font-size: 0.9em; }
