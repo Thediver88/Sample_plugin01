@@ -65,6 +65,17 @@ smpshelf_seed_simple(
 	)
 );
 
+// A 50% coupon, to prove it never touches a sample line.
+$coupon_id = wc_get_coupon_id_by_code( 'HALF' );
+if ( $coupon_id ) {
+	wp_delete_post( $coupon_id, true );
+}
+$coupon = new WC_Coupon();
+$coupon->set_code( 'HALF' );
+$coupon->set_discount_type( 'percent' );
+$coupon->set_amount( 50 );
+$coupon->save();
+
 // A variable product: two finishes, samples on.
 smpshelf_seed_clean( 'SS-OAK' );
 $oak = new WC_Product_Variable();

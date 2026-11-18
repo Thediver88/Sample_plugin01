@@ -56,8 +56,18 @@
 			hint.style.display = ready ? 'none' : '';
 		}
 
-		// Themes and blocks change the chosen option in different ways, so read it on a short timer.
-		window.setInterval( sync, 250 );
+		// Themes and blocks change the chosen option in different ways: react to form events at once,
+		// and keep a slow timer (paused while the tab is hidden) as a backstop.
+		[ 'change', 'input', 'click' ].forEach( function ( name ) {
+			document.addEventListener( name, function () {
+				window.setTimeout( sync, 50 );
+			} );
+		} );
+		window.setInterval( function () {
+			if ( ! document.hidden ) {
+				sync();
+			}
+		}, 500 );
 		sync();
 	}
 

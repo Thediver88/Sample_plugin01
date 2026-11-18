@@ -73,7 +73,7 @@ test.describe( 'Product page', () => {
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first() ).toContainText( 'Grey' );
-		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveText( /Sample/ );
+		await expect( rows.first().locator( 'dd.variation-Sample' ) ).toHaveText( /Yes/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 	} );
 } );
@@ -84,7 +84,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await page.locator( 'form.smpshelf-sample-form .smpshelf-button' ).click();
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
-		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveText( /Sample/ );
+		await expect( rows.first().locator( 'dd.variation-Sample' ) ).toHaveText( /Yes/ );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£0.00' );
 		await expect( rows.first().locator( 'input[type="number"]' ) ).toHaveCount( 0 ); // No quantity box.
 	} );
@@ -173,7 +173,7 @@ test.describe( 'Cart rules (classic cart)', () => {
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-quantity input.qty' ) ).toHaveValue( '3' );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£90.00' );
-		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveCount( 0 ); // Not a sample.
+		await expect( rows.first().locator( 'dd.variation-Sample' ) ).toHaveCount( 0 ); // Not a sample.
 	} );
 
 	test( 'the normal add-to-cart button still adds the chosen full-price variation', async ( { page } ) => {
@@ -183,7 +183,17 @@ test.describe( 'Cart rules (classic cart)', () => {
 		const rows = await cartRows( page );
 		await expect( rows ).toHaveCount( 1 );
 		await expect( rows.first().locator( '.product-subtotal' ) ).toContainText( '£45.00' );
-		await expect( rows.first().locator( 'dd.variation-Type' ) ).toHaveCount( 0 );
+		await expect( rows.first().locator( 'dd.variation-Sample' ) ).toHaveCount( 0 );
+	} );
+
+	test( 'a coupon discounts the full-price line but never the sample', async ( { page } ) => {
+		const id = await productId( page, URL.tile );
+		await page.request.post( URL.tile, { form: { 'add-to-cart': id, quantity: '1' } } ); // £30.
+		await postSample( page, URL.slate ); // £2.50 sample.
+		await page.goto( '/classic-cart/' );
+		await page.locator( '#coupon_code' ).fill( 'HALF' );
+		await page.locator( 'button[name="apply_coupon"]' ).click();
+		await expect( page.locator( 'tr.cart-discount' ) ).toContainText( '£15.00' ); // 50% of £30 only (not of £32.50).
 	} );
 
 	test( 'a quantity change to more than one is refused', async ( { page } ) => {
@@ -215,7 +225,7 @@ test.describe( 'Block cart', () => {
 		await page.goto( '/cart/' );
 		const items = page.locator( '.wc-block-cart-items' );
 		await expect( items ).toContainText( 'Sample Tile' );
-		await expect( items.locator( '.wc-block-components-product-details' ) ).toContainText( 'Sample' );
+		await expect( items.locator( '.wc-block-components-product-details' ) ).toContainText( 'Yes' );
 		await expect( items ).toContainText( '£0.00' );
 		// If the theme still shows a "+" button, using it must not raise the quantity.
 		const plus = items.locator( '.wc-block-components-quantity-selector__button--plus' );
@@ -248,7 +258,7 @@ test.describe( 'Classic checkout', () => {
 		// The thank-you page differs between themes, so read the page text.
 		const body = page.locator( 'body' );
 		await expect( body ).toContainText( 'Thank you. Your order has been received', { timeout: 45000 } );
-		await expect( body ).toContainText( /Type:\s*Sample/ );
+		await expect( body ).toContainText( /Sample:\s*Yes/ );
 		await page.goto( URL.linen );
 		await expect( page.locator( '.stock' ).first() ).toContainText( '3 in stock' ); // The sample took none.
 	} );

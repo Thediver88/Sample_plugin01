@@ -112,6 +112,15 @@ class Smpshelf_Cart {
 		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data[ self::KEY ] ) ) {
 			return true;
 		}
+		return self::request_flag();
+	}
+
+	/**
+	 * Whether the request carries the sample flag.
+	 *
+	 * @return bool
+	 */
+	private static function request_flag() {
 		return isset( $_REQUEST[ self::KEY ] ) && '1' === sanitize_text_field( wp_unslash( $_REQUEST[ self::KEY ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WooCommerce add-to-cart requests carry no nonce (so full-page caching works); the flag is only honoured after server-side validation below.
 	}
 
@@ -146,9 +155,18 @@ class Smpshelf_Cart {
 	 */
 	public static function validate( $passed, $product_id, $quantity = 1, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
 		unset( $quantity, $variations );
-		if ( ! self::is_sample_request( $cart_item_data ) ) {
+		$product_id   = absint( $product_id );
+		$variation_id = absint( $variation_id );
+
+		// The request flag only counts for the product the sample form actually posted (not for other
+		// add_to_cart() calls another plugin makes in the same request); order again marks the line itself.
+		$marked    = is_array( $cart_item_data ) && ! empty( $cart_item_data[ self::KEY ] );
+		$posted_id = isset( $_REQUEST['add-to-cart'] ) ? absint( wp_unslash( $_REQUEST['add-to-cart'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- compared with the product being added; see is_sample_request().
+		if ( ! $marked && ! ( self::request_flag() && $posted_id && ( $posted_id === $product_id || $posted_id === $variation_id ) ) ) {
+			unset( self::$approved[ $product_id ] ); // A normal add is never a sample, whatever was approved earlier.
 			return $passed;
 		}
+		unset( self::$approved[ $product_id ] ); // Approved again below only if everything passes.
 		if ( ! $passed ) {
 			return false;
 		}
@@ -158,9 +176,7 @@ class Smpshelf_Cart {
 			return false;
 		}
 
-		$product_id   = absint( $product_id );
-		$variation_id = absint( $variation_id );
-		$product      = wc_get_product( $product_id );
+		$product = wc_get_product( $product_id );
 		if ( $product && $product->is_type( 'variation' ) ) { // ?add-to-cart=<variation id>.
 			$variation_id = $product_id;
 			$product_id   = (int) $product->get_parent_id();
@@ -210,7 +226,7 @@ class Smpshelf_Cart {
 	 * @return int
 	 */
 	public static function quantity( $quantity, $product_id ) {
-		return self::is_approved( $product_id ) ? 1 : $quantity;
+		return ( self::is_approved( $product_id ) && self::request_flag() ) ? 1 : $quantity;
 	}
 
 	/**
@@ -221,7 +237,7 @@ class Smpshelf_Cart {
 	 * @return array
 	 */
 	public static function add_item_data( $data, $product_id ) {
-		if ( self::is_approved( $product_id ) ) {
+		if ( self::is_approved( $product_id ) && self::is_sample_request( $data ) ) {
 			$data[ self::KEY ] = 1;
 		}
 		return $data;
@@ -528,7 +544,7 @@ class Smpshelf_Cart {
 	}
 
 	/**
-	 * Percent and fixed-product coupons never apply to sample lines. (A fixed-cart coupon is taken off the whole cart by WooCommerce.)
+	 * Percent and fixed-product coupons never apply to sample lines. (WooCommerce applies a fixed-cart coupon to the cart as a whole, so it can still lower a paid sample.)
 	 *
 	 * @param bool       $valid   Current value.
 	 * @param WC_Product $product Product.
@@ -551,8 +567,8 @@ class Smpshelf_Cart {
 	public static function display_item_data( $item_data, $item ) {
 		if ( self::is_sample_item( $item ) ) {
 			$item_data[] = array(
-				'key'   => __( 'Type', 'sample-shelf-for-woocommerce' ),
-				'value' => __( 'Sample', 'sample-shelf-for-woocommerce' ),
+				'key'   => __( 'Sample', 'sample-shelf-for-woocommerce' ),
+				'value' => __( 'Yes', 'sample-shelf-for-woocommerce' ),
 			);
 		}
 		return $item_data;
@@ -571,6 +587,6 @@ class Smpshelf_Cart {
 			return;
 		}
 		$order_item->add_meta_data( self::ORDER_META, 'yes', true );
-		$order_item->add_meta_data( __( 'Type', 'sample-shelf-for-woocommerce' ), __( 'Sample', 'sample-shelf-for-woocommerce' ), true );
+		$order_item->add_meta_data( __( 'Sample', 'sample-shelf-for-woocommerce' ), __( 'Yes', 'sample-shelf-for-woocommerce' ), true );
 	}
 }
