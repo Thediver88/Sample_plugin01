@@ -66,12 +66,6 @@ Simple and variable products. Grouped and external products are not supported.
 
 Like your other prices: enter it with or without tax the same way you enter product prices.
 
-== Screenshots ==
-
-1. The Request a sample button on a product page.
-2. A sample in the cart, marked Sample: Yes.
-3. The Sample Shelf settings.
-
 == Changelog ==
 
 = 1.0.0 =
