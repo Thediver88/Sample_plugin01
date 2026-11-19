@@ -2,7 +2,7 @@
 /**
  * Plugin Name:          Sample Shelf for WooCommerce
  * Description:          Let shoppers request a free or low-cost sample of flooring, tile or fabric before they order.
- * Version:              0.1.0
+ * Version:              1.0.0
  * Requires at least:    6.9
  * Requires PHP:         7.4
  * Requires Plugins:     woocommerce
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMPSHELF_VERSION', '0.1.0' );
+define( 'SMPSHELF_VERSION', '1.0.0' );
 define( 'SMPSHELF_FILE', __FILE__ );
 define( 'SMPSHELF_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SMPSHELF_URL', plugin_dir_url( __FILE__ ) );

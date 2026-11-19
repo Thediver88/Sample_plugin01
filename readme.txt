@@ -4,7 +4,7 @@ Tags: woocommerce, samples, free samples, flooring, tile
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -66,18 +66,12 @@ Simple and variable products. Grouped and external products are not supported.
 
 Like your other prices: enter it with or without tax the same way you enter product prices.
 
-== Screenshots ==
-
-1. The Request a sample button on a product page.
-2. A sample in the cart, marked Sample: Yes.
-3. The Sample Shelf settings.
-
 == Changelog ==
 
-= 0.1.0 =
-* Pre-release build: samples, limits, settings, block and classic cart and checkout.
+= 1.0.0 =
+* First release: a "Request a sample" button for simple and variable products, free or low-cost samples, limits per order, a sample shipping class, optional stock use, settings screen and per-product options, block and classic cart and checkout, HPOS, and Cut & Pack 1.2 support.
 
 == Upgrade Notice ==
 
-= 0.1.0 =
-Pre-release build.
+= 1.0.0 =
+First release.
