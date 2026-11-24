@@ -38,7 +38,7 @@ Escalate with a push notification plus a one-tap question in the chat.
    posts critic reviews, never merges, and never pushes to `main`.
 5. **CI**: `.github/workflows/ci.yml` must be green: PHPCS, Plugin Check, PHPUnit, Playwright
    e2e on wp-env (classic + block checkout).
-6. **Release gate**: bump version in plugin header, `CUTPACK_VERSION`, `readme.txt` Stable tag +
+6. **Release gate**: bump version in plugin header, `SMPSHELF_VERSION`, `readme.txt` Stable tag +
    changelog; build with `bin/build-zip.sh`; run `principal-engineer` on the release.
 7. **Hand-off**: only after APPROVE, send the ZIP to the owner with a push notification. The owner
    uploads it. Never log in to WordPress.org as the owner.
